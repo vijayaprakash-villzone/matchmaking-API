@@ -244,18 +244,69 @@ if (in_array([$girlRasi,$boyRasi], $extraRasiBad, true)) {
 $details[] = result('Rasi Porutham', $rasiPoints, poruthamMessage($rasiPoints), $rasis[$girlRasi], $rasis[$boyRasi]);
 
 /* 7. Rasi Athipathi */
-$planetNames = [1=>'Sun',2=>'Moon',3=>'Mars',4=>'Mercury',5=>'Jupiter',6=>'Venus',7=>'Saturn'];
-$rasiLord = [1=>3,2=>6,3=>4,4=>2,5=>1,6=>4,7=>6,8=>3,9=>5,10=>7,11=>7,12=>5];
-$friends = [
-    1=>[2,3,5], 2=>[1,4], 3=>[1,2,5], 4=>[1,6],
-    5=>[1,2,3], 6=>[4,7], 7=>[4,6]
+$planetNames = [
+    1 => 'Sun',
+    2 => 'Moon',
+    3 => 'Mars',
+    4 => 'Mercury',
+    5 => 'Jupiter',
+    6 => 'Venus',
+    7 => 'Saturn'
 ];
-$equals = [1=>[4],2=>[3,5,6,7],3=>[6,7],4=>[3,5,7],5=>[7],6=>[3,5],7=>[5]];
-$enemies = [1=>[6,7],2=>[],3=>[4],4=>[2],5=>[4,6],6=>[1,2],7=>[1,2,3]];
+
+$rasiLord = [
+    1 => 3,
+    2 => 6,
+    3 => 4,
+    4 => 2,
+    5 => 1,
+    6 => 4,   // Virgo -> Mercury
+    7 => 6,   // Libra -> Venus
+    8 => 3,
+    9 => 5,
+    10 => 7,
+    11 => 7,
+    12 => 5
+];
+
+$friends = [
+    1 => [2,3,5],
+    2 => [1,4],
+    3 => [1,2,5],
+    4 => [1],       // Mercury
+    5 => [1,2,3],
+    6 => [4,7],
+    7 => [4,6]
+];
+
+$equals = [
+    1 => [4],
+    2 => [3,5,6,7],
+    3 => [6,7],
+    4 => [3,5,7],
+    5 => [7],
+    6 => [3,5],
+    7 => [5]
+];
+
+$enemies = [
+    1 => [6,7],
+    2 => [],
+    3 => [4],
+    4 => [2,6],     // Mercury -> Moon, Venus
+    5 => [4,6],
+    6 => [1,2],
+    7 => [1,2,3]
+];
+
 $gl = $rasiLord[$girlRasi];
 $bl = $rasiLord[$boyRasi];
+
 $athiPoints = 0.0;
-if ($gl === $bl || in_array($bl, $friends[$gl], true)) {
+
+if ($gl === $bl) {
+    $athiPoints = 1.0;
+} elseif (in_array($bl, $friends[$gl], true)) {
     $athiPoints = 1.0;
 } elseif (in_array($bl, $equals[$gl], true)) {
     $athiPoints = 0.5;
