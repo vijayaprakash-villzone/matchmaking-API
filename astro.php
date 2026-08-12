@@ -1,287 +1,398 @@
 <?php
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
-header("Access-Control-Allow-Headers: Content-Type");
-error_reporting(E_ALL); // Temporarily enable for debugging "empty space"
-ini_set('display_errors', 0); // Don't echo errors to output buffer
+/**
+ * NakshaMilan / Marriage Match API
+ *
+ * 12-Porutham engine aligned to the observed behavior of porutham.co.in's
+ * marriage-match result.php and the existing AstroVedham astro.php rules.
+ *
+ * Request (POST/GET):
+ *   bs = groom/boy star id 1..27
+ *   bp = groom/boy pada 1..4
+ *   gs = bride/girl star id 1..27
+ *   gp = bride/girl pada 1..4
+ *
+ * Response:
+ *   total_points: 0..12 (0.5 is intentionally supported where the source
+ *                 result uses a medium/partial state)
+ *   details: 12 poruthams in the same order as porutham.co.in
+ */
 
-// Catch fatal errors and return as JSON
-register_shutdown_function(function() {
-    $error = error_get_last();
-    if ($error !== NULL && ($error['type'] === E_ERROR || $error['type'] === E_PARSE || $error['type'] === E_COMPILE_ERROR)) {
-        echo json_encode([
-            "status" => "error",
-            "message" => "Internal Server Error: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']
-        ]);
-        exit;
-    }
-});
+header('Content-Type: application/json; charset=UTF-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
 
-$boystarid = isset($_REQUEST['bs']) ? $_REQUEST['bs'] : 1;
-$girlstarid = isset($_REQUEST['gs']) ? $_REQUEST['gs'] : 1;
-$boypadaid = isset($_REQUEST['bp']) ? $_REQUEST['bp'] : 1;
-$girlpadaid = isset($_REQUEST['gp']) ? $_REQUEST['gp'] : 1;
-$lang_code = isset($_REQUEST['lang']) ? $_REQUEST['lang'] : 'en';
-
-// Load language
-$lang_file = __DIR__ . "/languages/" . $lang_code . ".php";
-if (!file_exists($lang_file)) {
-    $lang_file = __DIR__ . "/languages/en.php";
-}
-
-ob_start(); // Buffer output to prevent accidental spaces
-$lang = include($lang_file);
-ob_clean(); // Discard any accidental output from include
-
-if (!is_array($lang)) {
-    echo json_encode(["status" => "error", "message" => "Language file not found or invalid: " . $lang_code]);
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
     exit;
 }
 
-$star_array = $lang['stars'];
-$rasiArray = $lang['rasis'];
-$kanamArray = $lang['kanams'];
-$messages = $lang['messages'];
-$poruthams = $lang['poruthams'];
-$rajjuLabels = $lang['rajjus'];
+$boystarid = filter_input(INPUT_POST, 'bs', FILTER_VALIDATE_INT);
+$boypadaid = filter_input(INPUT_POST, 'bp', FILTER_VALIDATE_INT);
+$girlstarid = filter_input(INPUT_POST, 'gs', FILTER_VALIDATE_INT);
+$girlpadaid = filter_input(INPUT_POST, 'gp', FILTER_VALIDATE_INT);
 
-$starToKanam = [
-    1 => 1, 2 => 2, 3 => 3, 4 => 2, 5 => 1, 6 => 2, 7 => 1, 8 => 1, 9 => 3, 10 => 3,
-    11 => 2, 12 => 2, 13 => 1, 14 => 3, 15 => 1, 16 => 3, 17 => 1, 18 => 3, 19 => 3, 20 => 2,
-    21 => 2, 22 => 1, 23 => 3, 24 => 3, 25 => 2, 26 => 2, 27 => 1
+// Keep compatibility with the existing Flutter/Postman implementation when
+// the values are sent as query/form fields through REQUEST rather than POST.
+$boystarid = $boystarid ?: (isset($_REQUEST['bs']) ? (int) $_REQUEST['bs'] : 0);
+$boypadaid = $boypadaid ?: (isset($_REQUEST['bp']) ? (int) $_REQUEST['bp'] : 0);
+$girlstarid = $girlstarid ?: (isset($_REQUEST['gs']) ? (int) $_REQUEST['gs'] : 0);
+$girlpadaid = $girlpadaid ?: (isset($_REQUEST['gp']) ? (int) $_REQUEST['gp'] : 0);
+
+$stars = [
+    1 => 'Ashwini', 2 => 'Bharani', 3 => 'Krittika', 4 => 'Rohini',
+    5 => 'Mrigashira', 6 => 'Ardra', 7 => 'Punarvasu', 8 => 'Pushya',
+    9 => 'Ashlesha', 10 => 'Magha', 11 => 'Purva Phalguni', 12 => 'Uttara Phalguni',
+    13 => 'Hasta', 14 => 'Chitra', 15 => 'Swati', 16 => 'Vishakha',
+    17 => 'Anuradha', 18 => 'Jyeshtha', 19 => 'Mula', 20 => 'Purva Ashadha',
+    21 => 'Uttara Ashadha', 22 => 'Shravana', 23 => 'Dhanishtha', 24 => 'Shatabhisha',
+    25 => 'Purva Bhadrapada', 26 => 'Uttara Bhadrapada', 27 => 'Revati'
 ];
 
-$starPadaRasiArray = [
-    '1-1' => 1, '1-2' => 1, '1-3' => 1, '1-4' => 1, '2-1' => 1, '2-2' => 1, '2-3' => 1, '2-4' => 1, '3-1' => 1,
-    '3-2' => 2, '3-3' => 2, '3-4' => 2, '4-1' => 2, '4-2' => 2, '4-3' => 2, '4-4' => 2, '5-1' => 2, '5-2' => 2,
-    '5-3' => 3, '5-4' => 3, '6-1' => 3, '6-2' => 3, '6-3' => 3, '6-4' => 3, '7-1' => 3, '7-2' => 3, '7-3' => 3,
-    '7-4' => 4, '8-1' => 4, '8-2' => 4, '8-3' => 4, '8-4' => 4, '9-1' => 4, '9-2' => 4, '9-3' => 4, '9-4' => 4,
-    '10-1' => 5, '10-2' => 5, '10-3' => 5, '10-4' => 5, '11-1' => 5, '11-2' => 5, '11-3' => 5, '11-4' => 5,
-    '12-1' => 5, '12-2' => 6, '12-3' => 6, '12-4' => 6, '13-1' => 6, '13-2' => 6, '13-3' => 6, '13-4' => 6,
-    '14-1' => 6, '14-2' => 6, '14-3' => 7, '14-4' => 7, '15-1' => 7, '15-2' => 7, '15-3' => 7, '15-4' => 7,
-    '16-1' => 7, '16-2' => 7, '16-3' => 7, '16-4' => 8, '17-1' => 8, '17-2' => 8, '17-3' => 8, '17-4' => 8,
-    '18-1' => 8, '18-2' => 8, '18-3' => 8, '18-4' => 8, '19-1' => 9, '19-2' => 9, '19-3' => 9, '19-4' => 9,
-    '20-1' => 9, '20-2' => 9, '20-3' => 9, '20-4' => 9, '21-1' => 9, '21-2' => 10, '21-3' => 10, '21-4' => 10,
-    '22-1' => 10, '22-2' => 10, '22-3' => 10, '22-4' => 10, '23-1' => 10, '23-2' => 10, '23-3' => 11, '23-4' => 11,
-    '24-1' => 11, '24-2' => 11, '24-3' => 11, '24-4' => 11, '25-1' => 11, '25-2' => 11, '25-3' => 11, '25-4' => 12,
-    '26-1' => 12, '26-2' => 12, '26-3' => 12, '26-4' => 12, '27-1' => 12, '27-2' => 12, '27-3' => 12, '27-4' => 12,
+$rasis = [
+    1 => 'Aries', 2 => 'Taurus', 3 => 'Gemini', 4 => 'Cancer',
+    5 => 'Leo', 6 => 'Virgo', 7 => 'Libra', 8 => 'Scorpio',
+    9 => 'Sagittarius', 10 => 'Capricorn', 11 => 'Aquarius', 12 => 'Pisces'
 ];
 
-function StarPosCalc()
-{
-    global $boystarid, $girlstarid;
-    if ($boystarid >= $girlstarid) {
-        return ($boystarid - $girlstarid) + 1;
+// Rasi for each Nakshatra Pada. Index is [star][pada].
+$starPadaRasi = [
+    1 => [1,1,1,1], 2 => [1,1,1,1], 3 => [1,2,2,2], 4 => [2,2,2,2],
+    5 => [2,2,3,3], 6 => [3,3,3,3], 7 => [3,3,3,4], 8 => [4,4,4,4],
+    9 => [4,4,4,4], 10 => [5,5,5,5], 11 => [5,5,5,5], 12 => [5,6,6,6],
+    13 => [6,6,6,6], 14 => [6,6,7,7], 15 => [7,7,7,7], 16 => [7,7,7,8],
+    17 => [8,8,8,8], 18 => [8,8,8,8], 19 => [9,9,9,9], 20 => [9,9,9,9],
+    21 => [9,9,10,10], 22 => [10,10,10,10], 23 => [10,10,11,11],
+    24 => [11,11,11,11], 25 => [11,11,12,12], 26 => [12,12,12,12],
+    27 => [12,12,12,12]
+];
+
+$gana = [
+    1 => 1, 2 => 2, 3 => 3, 4 => 2, 5 => 1, 6 => 2, 7 => 1, 8 => 1,
+    9 => 3, 10 => 3, 11 => 2, 12 => 2, 13 => 1, 14 => 3, 15 => 1,
+    16 => 3, 17 => 1, 18 => 3, 19 => 3, 20 => 2, 21 => 2, 22 => 1,
+    23 => 3, 24 => 3, 25 => 2, 26 => 2, 27 => 1
+];
+$ganaNames = [1 => 'Deva Ganam', 2 => 'Manushya Ganam', 3 => 'Rakshasa Ganam'];
+
+function starDistance(int $girl, int $boy): int {
+    return (($boy - $girl + 27) % 27) + 1;
+}
+
+function rasiDistance(int $girlRasi, int $boyRasi): int {
+    return (($boyRasi - $girlRasi + 12) % 12) + 1;
+}
+
+function result(string $label, float $points, string $message, string $girlLabel, string $boyLabel): array {
+    return [
+        'lable' => $label,
+        'points' => $points,
+        'message' => $message,
+        'girlLable' => $girlLabel,
+        'boyLable' => $boyLabel,
+    ];
+}
+
+function poruthamMessage(float $points): string {
+    if ($points >= 1.0) return 'Excellent Match';
+    if ($points > 0.0) return 'Medium Match';
+    return 'Not Matched';
+}
+
+if (
+    $boystarid < 1 || $boystarid > 27 ||
+    $girlstarid < 1 || $girlstarid > 27 ||
+    $boypadaid < 1 || $boypadaid > 4 ||
+    $girlpadaid < 1 || $girlpadaid > 4
+) {
+    http_response_code(400);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Invalid input. bs/gs must be 1-27 and bp/gp must be 1-4.'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$girlRasi = $starPadaRasi[$girlstarid][$girlpadaid - 1];
+$boyRasi = $starPadaRasi[$boystarid][$boypadaid - 1];
+$starPos = starDistance($girlstarid, $boystarid);
+$rasiPos = rasiDistance($girlRasi, $boyRasi);
+
+$details = [];
+
+/* 1. Dina Porutham
+ * Existing source behavior: 2,4,6,8,9,11,13,15,17,18,20,22,24,26,27 are
+ * full matches. Same-star special cases are retained because the observed
+ * porutham.co.in Ashwini/Ashwini response returns Medium Match.
+ */
+$dinaFull = [2,4,6,8,9,11,13,15,17,18,20,22,24,26,27];
+$dinaSameMedium = [11,12,14,7,8,1,3,20,21,5,17];
+$dinaPoints = 0.0;
+if ($girlstarid === $boystarid) {
+    if (in_array($girlstarid, [4,6,10,16,22,13,26,27], true)) {
+        $dinaPoints = 1.0;
+    } elseif (in_array($girlstarid, $dinaSameMedium, true)) {
+        $dinaPoints = 0.5;
     } else {
-        return (27 - $girlstarid + $boystarid) + 1;
+        $dinaPoints = 1.0;
     }
+} elseif (
+    ($starPos === 12 && in_array($girlpadaid, [2,3,4], true)) ||
+    ($starPos === 14 && in_array($girlpadaid, [1,2,3], true)) ||
+    ($starPos === 16 && in_array($girlpadaid, [1,2,4], true))
+) {
+    $dinaPoints = 0.5;
+} elseif (in_array($starPos, $dinaFull, true)) {
+    $dinaPoints = 1.0;
 }
+$details[] = result('Dina Porutham', $dinaPoints, poruthamMessage($dinaPoints), $stars[$girlstarid], $stars[$boystarid]);
 
-function rasiPosCalc()
-{
-    global $starPadaRasiArray, $boypadaid, $girlpadaid, $boystarid, $girlstarid;
-    $boyRasiId = $starPadaRasiArray[$boystarid . '-' . $boypadaid];
-    $girlRasiId = $starPadaRasiArray[$girlstarid . '-' . $girlpadaid];
-    if ($boyRasiId >= $girlRasiId) {
-        return ($boyRasiId - $girlRasiId) + 1;
+/* 2. Gana Porutham
+ * Observed source example: Deva girl + Manushya boy is presented as a match.
+ * Same-gana is full. Rakshasa as bride against a non-Rakshasa groom is fail;
+ * non-Rakshasa bride with Rakshasa groom is medium.
+ */
+$gg = $gana[$girlstarid];
+$bg = $gana[$boystarid];
+$ganaPoints = 0.0;
+if ($gg === $bg) {
+    $ganaPoints = 1.0;
+} elseif ($gg === 1 && $bg === 2) {
+    $ganaPoints = 1.0;
+} elseif ($gg === 2 && $bg === 1) {
+    $ganaPoints = 0.5;
+} elseif ($gg === 1 && $bg === 3) {
+    $ganaPoints = 0.0;
+} elseif ($gg === 2 && $bg === 3) {
+    $ganaPoints = 0.5;
+} elseif ($gg === 3 && $bg !== 3) {
+    $ganaPoints = 0.0;
+}
+$details[] = result('Gana Porutham', $ganaPoints, poruthamMessage($ganaPoints), $ganaNames[$gg], $ganaNames[$bg]);
+
+/* 3. Mahendra */
+$mahendraPoints = in_array($starPos, [4,7,10,13,16,19,22,25], true) ? 1.0 : 0.0;
+$details[] = result('Mahendra Porutham', $mahendraPoints, poruthamMessage($mahendraPoints), $stars[$girlstarid], $stars[$boystarid]);
+
+/* 4. Sthree Deergha */
+$streePoints = $starPos > 13 ? 1.0 : 0.0;
+$details[] = result('Stree Porutham', $streePoints, poruthamMessage($streePoints), $stars[$girlstarid], $stars[$boystarid]);
+
+/* 5. Yoni */
+$yoni = [
+    1=>'Horse', 2=>'Elephant', 3=>'Sheep', 4=>'Snake', 5=>'Snake', 6=>'Dog',
+    7=>'Cat', 8=>'Sheep', 9=>'Cat', 10=>'Rat', 11=>'Rat', 12=>'Cow',
+    13=>'Buffalo', 14=>'Tiger', 15=>'Buffalo', 16=>'Tiger', 17=>'Deer',
+    18=>'Deer', 19=>'Dog', 20=>'Monkey', 21=>'Mongoose', 22=>'Monkey',
+    23=>'Lion', 24=>'Horse', 25=>'Lion', 26=>'Cow', 27=>'Elephant'
+];
+$hostileYoni = [
+    'Elephant' => ['Lion'],
+    'Lion' => ['Elephant'],
+    'Horse' => ['Buffalo', 'Cow'],
+    'Buffalo' => ['Horse'],
+    'Cow' => ['Horse', 'Buffalo', 'Tiger'],
+    'Tiger' => ['Cow', 'Buffalo', 'Deer', 'Dog'],
+    'Deer' => ['Tiger', 'Dog'],
+    'Dog' => ['Cat', 'Tiger', 'Deer'],
+    'Cat' => ['Dog', 'Rat'],
+    'Rat' => ['Cat', 'Snake'],
+    'Snake' => ['Rat', 'Mongoose', 'Sheep'],
+    'Mongoose' => ['Snake', 'Sheep'],
+    'Sheep' => ['Monkey', 'Snake', 'Mongoose'],
+    'Monkey' => ['Sheep'],
+];
+$girlYoni = $yoni[$girlstarid];
+$boyYoni = $yoni[$boystarid];
+$yoniPoints = ($girlYoni === $boyYoni) ? 1.0 : 1.0;
+if (isset($hostileYoni[$girlYoni]) && in_array($boyYoni, $hostileYoni[$girlYoni], true)) {
+    $yoniPoints = 0.0;
+}
+$details[] = result('Yoni Porutham', $yoniPoints, poruthamMessage($yoniPoints), $girlYoni, $boyYoni);
+
+/* 6. Rasi */
+$rasiPoints = 0.0;
+if ($girlRasi === $boyRasi) {
+    $rasiPoints = 1.0;
+} elseif ($rasiPos === 7) {
+    $bad7 = [
+        [4,10], [10,4], [5,11], [11,5]
+    ];
+    $rasiPoints = in_array([$girlRasi,$boyRasi], $bad7, true) ? 0.0 : 1.0;
+} elseif (in_array($rasiPos, [3,4,12], true)) {
+    $rasiPoints = 0.5;
+} elseif (in_array($rasiPos, [2,5,6,8], true)) {
+    $rasiPoints = 0.0;
+} elseif (in_array($rasiPos, [9,10,11], true)) {
+    $rasiPoints = 1.0;
+}
+$extraRasiBad = [
+    [4,9],[6,11],[8,1],[10,3],[12,5]
+];
+if (in_array([$girlRasi,$boyRasi], $extraRasiBad, true)) {
+    $rasiPoints = 0.0;
+}
+$details[] = result('Rasi Porutham', $rasiPoints, poruthamMessage($rasiPoints), $rasis[$girlRasi], $rasis[$boyRasi]);
+
+/* 7. Rasi Athipathi */
+$planetNames = [1=>'Sun',2=>'Moon',3=>'Mars',4=>'Mercury',5=>'Jupiter',6=>'Venus',7=>'Saturn'];
+$rasiLord = [1=>3,2=>6,3=>4,4=>2,5=>1,6=>4,7=>6,8=>3,9=>5,10=>7,11=>7,12=>5];
+$friends = [
+    1=>[2,3,5], 2=>[1,4], 3=>[1,2,5], 4=>[1,6],
+    5=>[1,2,3], 6=>[4,7], 7=>[4,6]
+];
+$equals = [1=>[4],2=>[3,5,6,7],3=>[6,7],4=>[3,5,7],5=>[7],6=>[3,5],7=>[5]];
+$enemies = [1=>[6,7],2=>[],3=>[4],4=>[2],5=>[4,6],6=>[1,2],7=>[1,2,3]];
+$gl = $rasiLord[$girlRasi];
+$bl = $rasiLord[$boyRasi];
+$athiPoints = 0.0;
+if ($gl === $bl || in_array($bl, $friends[$gl], true)) {
+    $athiPoints = 1.0;
+} elseif (in_array($bl, $equals[$gl], true)) {
+    $athiPoints = 0.5;
+} elseif (in_array($bl, $enemies[$gl], true)) {
+    $athiPoints = 0.0;
+}
+// Preserve the source's special 7th-rasi handling.
+if ($girlRasi !== $boyRasi && $rasiPos === 7) {
+    $bad7Lord = [
+        [4,10], [10,4], [10,5], [5,11], [11,5]
+    ];
+    if (in_array([$girlRasi,$boyRasi], $bad7Lord, true)) {
+        $athiPoints = 0.0;
     } else {
-        return (12 - $girlRasiId + $boyRasiId) + 1;
+        $athiPoints = 0.5;
     }
 }
+$details[] = result('Rasi Athipathi Porutham', $athiPoints, poruthamMessage($athiPoints), $planetNames[$gl], $planetNames[$bl]);
 
-$startPosfromGirlToBoy = StarPosCalc();
-
-function dinaporuthamCalc()
-{
-    global $star_array, $startPosfromGirlToBoy, $girlpadaid, $boystarid, $girlstarid, $messages, $poruthams;
-    $dinaContitionOne = [2, 4, 6, 8, 9, 11, 13, 15, 17, 18, 20, 22, 24, 26, 27];
-    $dinaContitionTwo = [4, 6, 10, 16, 22, 13, 26, 27];
-
-    if ($boystarid == $girlstarid) {
-        if (in_array($girlstarid, $dinaContitionTwo)) {
-            $msg = $messages['excellent'];
-            $points = 1;
-        } else {
-            $msg = $messages['matched'];
-            $points = 1;
-        }
-    } else {
-        if (in_array($startPosfromGirlToBoy, $dinaContitionOne)) {
-            $msg = $messages['excellent'];
-            $points = 1;
-        } else {
-            $msg = $messages['not_matched'];
-            $points = 0;
-        }
-    }
-    return ["lable" => $poruthams['dina'], 'points' => $points, "message" => $msg, 'girlLable' => $star_array[$girlstarid], 'boyLable' => $star_array[$boystarid]];
+/* 8. Vasya */
+$vasya = [
+    1=>[5,8], 2=>[4,7], 3=>[6], 4=>[8,9], 5=>[10], 6=>[2,12],
+    7=>[10], 8=>[4,6], 9=>[12], 10=>[11], 11=>[12], 12=>[10]
+];
+$vasyaPoints = 0.0;
+if (in_array($boyRasi, $vasya[$girlRasi], true)) {
+    $vasyaPoints = 1.0;
+} elseif (in_array($girlRasi, $vasya[$boyRasi], true)) {
+    $vasyaPoints = 0.5;
 }
+$details[] = result('Vasiya Porutham', $vasyaPoints, poruthamMessage($vasyaPoints), $rasis[$girlRasi], $rasis[$boyRasi]);
 
-function kanaPoruthamCalc()
-{
-    global $starToKanam, $kanamArray, $startPosfromGirlToBoy, $girlstarid, $boystarid, $messages, $poruthams;
-    $girlKanamId = $starToKanam[$girlstarid];
-    $boyKanamId = $starToKanam[$boystarid];
-    if (($girlKanamId == $boyKanamId) || ($girlKanamId == 2 && $boyKanamId == 1)) {
-        $msg = $messages['excellent'];
-        $points = 1;
-    } else {
-        $msg = $messages['not_matched'];
-        $points = 0;
-    }
-    return ["lable" => $poruthams['gana'], 'points' => $points, "message" => $msg, 'girlLable' => $kanamArray[$girlKanamId], 'boyLable' => $kanamArray[$boyKanamId]];
-}
+/* 9. Rajju
+ * The observed porutham.co.in result explicitly treats different Rajju
+ * groups as a match even when both are in the same direction. Therefore the
+ * direction is descriptive only; it is NOT a half-point penalty.
+ */
+$rajjuDirection = [
+    1=>1,2=>1,3=>1,4=>1,5=>1,6=>2,7=>2,8=>2,9=>2,
+    10=>1,11=>1,12=>1,13=>1,14=>1,15=>2,16=>2,17=>2,18=>2,
+    19=>1,20=>1,21=>1,22=>1,23=>1,24=>2,25=>2,26=>2,27=>2
+];
+$rajjuGroup = [
+    1=>1,2=>2,3=>3,4=>4,5=>5,6=>4,7=>3,8=>2,9=>1,
+    10=>1,11=>2,12=>3,13=>4,14=>5,15=>4,16=>3,17=>2,18=>1,
+    19=>1,20=>2,21=>3,22=>4,23=>5,24=>4,25=>3,26=>2,27=>1
+];
+$rajjuNames = [1=>'Pada Rajju',2=>'Thodai Rajju',3=>'Udara Rajju',4=>'Kanda Rajju',5=>'Sirasu Rajju'];
+$girlRajju = $rajjuGroup[$girlstarid];
+$boyRajju = $rajjuGroup[$boystarid];
+$rajjuPoints = ($girlRajju === $boyRajju) ? 0.0 : 1.0;
+$details[] = result('Rajju Porutham', $rajjuPoints, poruthamMessage($rajjuPoints), $rajjuNames[$girlRajju], $rajjuNames[$boyRajju]);
 
-function magentharaPoruthamCalc()
-{
-    global $star_array, $girlstarid, $boystarid, $startPosfromGirlToBoy, $messages, $poruthams;
-    if (in_array($startPosfromGirlToBoy, [1, 4, 7, 10, 13, 16, 19, 22, 25])) {
-        $msg = $messages['excellent'];
-        $points = 1;
-    } else {
-        $msg = $messages['not_matched'];
-        $points = 0;
-    }
-    return ["lable" => $poruthams['mahendra'], 'points' => $points, "message" => $msg, 'girlLable' => $star_array[$girlstarid], 'boyLable' => $star_array[$boystarid]];
-}
-
-function istriPoruthamCalc()
-{
-    global $star_array, $girlstarid, $boystarid, $startPosfromGirlToBoy, $messages, $poruthams;
-    if ($startPosfromGirlToBoy > 13) {
-        $msg = $messages['excellent'];
-        $points = 1;
-    } else {
-        $msg = $messages['not_matched'];
-        $points = 0;
-    }
-    return ["lable" => $poruthams['stree'], 'points' => $points, "message" => $msg, 'girlLable' => $star_array[$girlstarid], 'boyLable' => $star_array[$boystarid]];
-}
-
-function yoniPoruthamCalc()
-{
-    global $boystarid, $girlstarid, $lang, $messages, $poruthams;
-    $yoniVal = $lang['yoni_values'];
-    $k = $lang['yoni_animals'];
-    $tempMale = $yoniVal[$boystarid];
-    $tempFemale = $yoniVal[$girlstarid];
-    $msg = $messages['not_matched'];
-    $points = 0;
-    if ($tempMale == $tempFemale) {
-        $msg = $messages['excellent'];
-        $points = 1;
-    } else {
-        $maleHasMale = strpos($tempMale, $k['male']) !== false;
-        $maleHasFemale = strpos($tempMale, $k['female']) !== false;
-        $femaleHasMale = strpos($tempFemale, $k['male']) !== false;
-        $femaleHasFemale = strpos($tempFemale, $k['female']) !== false;
-        if (($maleHasMale && $femaleHasFemale) || ($femaleHasMale && $maleHasFemale)) {
-            $msg = $messages['excellent']; $points = 1;
-        } else if (($femaleHasMale && $maleHasMale) || ($femaleHasFemale && $maleHasFemale)) {
-            $msg = $messages['matched']; $points = 1;
-        }
-        $conflicts = [
-            [$k['elephant'], $k['lion']], [$k['elephant'], $k['human']], [$k['horse'], $k['cow']],
-            [$k['horse'], $k['buffalo']], [$k['horse'], $k['mongoose']], [$k['buffalo'], $k['cow']],
-            [$k['tiger'], $k['cow']], [$k['tiger'], $k['buffalo']], [$k['tiger'], $k['deer']],
-            [$k['tiger'], $k['dog']], [$k['monkey'], $k['goat']], [$k['rat'], $k['cat']],
-            [$k['rat'], $k['snake']], [$k['snake'], $k['mongoose']], [$k['snake'], $k['goat']],
-            [$k['cat'], $k['dog']], [$k['cat'], $k['tiger']]
-        ];
-        foreach ($conflicts as $pair) {
-            if ((strpos($tempFemale, $pair[0]) !== false && strpos($tempMale, $pair[1]) !== false) ||
-                (strpos($tempMale, $pair[0]) !== false && strpos($tempFemale, $pair[1]) !== false)) {
-                $msg = $messages['not_matched']; $points = 0; break;
-            }
-        }
-        if ($points != 0) {
-            $friendly = [[$k['deer'], $k['cow']], [$k['goat'], $k['horse']], [$k['dog'], $k['human']]];
-            foreach ($friendly as $pair) {
-                if ((strpos($tempFemale, $pair[0]) !== false && strpos($tempMale, $pair[1]) !== false) ||
-                    (strpos($tempMale, $pair[0]) !== false && strpos($tempFemale, $pair[1]) !== false)) {
-                    $msg = $messages['excellent']; $points = 1;
-                }
-            }
-        }
-    }
-    return ["lable" => $poruthams['yoni'], 'points' => $points, "message" => $msg, 'girlLable' => $tempFemale, 'boyLable' => $tempMale];
-}
-
-function rasiPoruthamCalc()
-{
-    global $rasiArray, $starPadaRasiArray, $boypadaid, $girlpadaid, $boystarid, $girlstarid, $messages, $poruthams;
-    $rasiPos = rasiPosCalc();
-    $boyRasiId = $starPadaRasiArray[$boystarid . '-' . $boypadaid];
-    $girlRasiId = $starPadaRasiArray[$girlstarid . '-' . $girlpadaid];
-    $msg = $messages['low']; $points = 0;
-    if ($boyRasiId == $girlRasiId) { $msg = $messages['excellent']; $points = 1; }
-    else if ($rasiPos == 7) {
-        if (($girlRasiId == 4 && $boyRasiId == 10) || ($girlRasiId == 10 && $boyRasiId == 4) || ($girlRasiId == 5 && $boyRasiId == 11) || ($girlRasiId == 11 && $boyRasiId == 5)) {
-            $msg = $messages['not_matched']; $points = 0;
-        } else { $msg = $messages['excellent']; $points = 1; }
-    } else if (in_array($rasiPos, [9, 10, 11])) {
-        $msg = $messages['excellent']; $points = 1;
-    }
-    return ["lable" => $poruthams['rasi'], 'points' => $points, "message" => $msg, 'girlLable' => $rasiArray[$girlRasiId], 'boyLable' => $rasiArray[$boyRasiId]];
-}
-
-function rasiAthipathiPoruthamCalc()
-{
-    global $starPadaRasiArray, $boypadaid, $girlpadaid, $boystarid, $girlstarid, $lang, $messages, $poruthams;
-    $p = $lang['planets'];
-    $athipathi = [1 => 3, 2 => 6, 3 => 4, 4 => 2, 5 => 1, 6 => 4, 7 => 6, 8 => 3, 9 => 5, 10 => 7, 11 => 7, 12 => 5];
-    $boyRasiId = $starPadaRasiArray[$boystarid . '-' . $boypadaid];
-    $girlRasiId = $starPadaRasiArray[$girlstarid . '-' . $girlpadaid];
-    $gAth = $athipathi[$girlRasiId]; $bAth = $athipathi[$boyRasiId];
-    $natpu = [1 => [2, 3, 5], 2 => [1, 4], 3 => [1, 2, 5], 4 => [1, 6], 5 => [1, 2, 3], 6 => [4, 7], 7 => [4, 6]];
-    $msg = $messages['low']; $points = 0;
-    if ($gAth == $bAth || in_array($bAth, $natpu[$gAth])) { $msg = $messages['excellent']; $points = 1; }
-    return ["lable" => $poruthams['rasi_athipathi'], 'points' => $points, "message" => $msg, 'girlLable' => $p[$gAth], 'boyLable' => $p[$bAth]];
-}
-
-function vasiyaPoruthamCalc()
-{
-    global $rasiArray, $starPadaRasiArray, $boypadaid, $girlpadaid, $boystarid, $girlstarid, $messages, $poruthams;
-    $vasiya = [1 => [5, 8], 2 => [4, 7], 3 => [6], 4 => [8, 9], 5 => [10], 6 => [2, 12], 7 => [10], 8 => [4, 6], 9 => [12], 10 => [11], 11 => [12], 12 => [10]];
-    $boyRasiId = $starPadaRasiArray[$boystarid . '-' . $boypadaid];
-    $girlRasiId = $starPadaRasiArray[$girlstarid . '-' . $girlpadaid];
-    $msg = $messages['not_matched']; $points = 0;
-    if (in_array($boyRasiId, $vasiya[$girlRasiId] ?? [])) { $msg = $messages['excellent']; $points = 1; }
-    return ["lable" => $poruthams['vasiya'], 'points' => $points, "message" => $msg, 'girlLable' => $rasiArray[$girlRasiId], 'boyLable' => $rasiArray[$boyRasiId]];
-}
-
-function rajjuPoruthamCalc()
-{
-    global $boystarid, $girlstarid, $messages, $poruthams, $rajjuLabels;
-    $rajju2 = [1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 6, 7 => 7, 8 => 8, 9 => 9, 10 => 1, 11 => 2, 12 => 3, 13 => 4, 14 => 5, 15 => 6, 16 => 7, 17 => 8, 18 => 9, 19 => 1, 20 => 2, 21 => 3, 22 => 4, 23 => 5, 24 => 6, 25 => 7, 26 => 8, 27 => 9];
-    $rajju3 = [1 => 1, 2 => 2, 3 => 3, 4 => 4, 5 => 5, 6 => 4, 7 => 3, 8 => 2, 9 => 1, 10 => 1, 11 => 2, 12 => 3, 13 => 4, 14 => 5, 15 => 4, 16 => 3, 17 => 2, 18 => 1, 19 => 1, 20 => 2, 21 => 3, 22 => 4, 23 => 5, 24 => 4, 25 => 3, 26 => 2, 27 => 1];
-    $g2 = $rajju2[$girlstarid]; $b2 = $rajju2[$boystarid];
-    $g3 = $rajju3[$girlstarid]; $b3 = $rajju3[$boystarid];
-    $con2Names = [1 => $rajjuLabels['arogana'] . " " . $rajjuLabels[1], 2 => $rajjuLabels['arogana'] . " " . $rajjuLabels[2], 3 => $rajjuLabels['arogana'] . " " . $rajjuLabels[3], 4 => $rajjuLabels['arogana'] . " " . $rajjuLabels[4], 5 => $rajjuLabels[5], 6 => $rajjuLabels['avarogana'] . " " . $rajjuLabels[4], 7 => $rajjuLabels['avarogana'] . " " . $rajjuLabels[3], 8 => $rajjuLabels['avarogana'] . " " . $rajjuLabels[2], 9 => $rajjuLabels['avarogana'] . " " . $rajjuLabels[1]];
-    if ($g3 == $b3) { $msg = $messages['not_matched']; $points = 0; }
-    else { $msg = $messages['excellent']; $points = 1; }
-    return ["lable" => $poruthams['rajju'], 'points' => $points, "message" => $msg, 'girlLable' => $con2Names[$g2], 'boyLable' => $con2Names[$b2]];
-}
-
-function vethaiPoruthamCalc()
-{
-    global $star_array, $boystarid, $girlstarid, $messages, $poruthams;
-    $bad = [[1, 18], [2, 17], [3, 16], [4, 15], [6, 22], [7, 21], [9, 19], [10, 27], [8, 20], [11, 26], [12, 25], [13, 24]];
-    $msg = $messages['excellent']; $points = 1;
-    foreach ($bad as $pair) { if (($girlstarid == $pair[0] && $boystarid == $pair[1]) || ($girlstarid == $pair[1] && $boystarid == $pair[0])) { $msg = $messages['not_matched']; $points = 0; break; } }
-    if ($points != 0 && in_array($girlstarid, [5, 14, 23]) && in_array($boystarid, [5, 14, 23])) { $msg = $messages['not_matched']; $points = 0; }
-    return ["lable" => $poruthams['vedhai'], 'points' => $points, "message" => $msg, 'girlLable' => $star_array[$girlstarid], 'boyLable' => $star_array[$boystarid]];
-}
-
-$results = [dinaporuthamCalc(), kanaPoruthamCalc(), magentharaPoruthamCalc(), istriPoruthamCalc(), yoniPoruthamCalc(), rasiPoruthamCalc(), rasiAthipathiPoruthamCalc(), vasiyaPoruthamCalc(), rajjuPoruthamCalc(), vethaiPoruthamCalc()];
-$total = 0;
-$matchedCount = 0;
-foreach ($results as $res) {
-    $total += $res['points'];
-    if ($res['points'] >= 1.0) {
-        $matchedCount++;
+/* 10. Vedha */
+$vedhaPairs = [
+    [1,18],[2,17],[3,16],[4,15],[6,22],[7,21],[8,20],
+    [9,19],[10,27],[11,26],[12,25],[13,24]
+];
+$vedhaPoints = 1.0;
+foreach ($vedhaPairs as $pair) {
+    if (($girlstarid === $pair[0] && $boystarid === $pair[1]) || ($girlstarid === $pair[1] && $boystarid === $pair[0])) {
+        $vedhaPoints = 0.0;
+        break;
     }
 }
-echo json_encode(["status" => $messages['success'], "total_points" => $total, "matched_count" => $matchedCount, "details" => $results], JSON_UNESCAPED_UNICODE);
-exit;
+$details[] = result('Vedhai Porutham', $vedhaPoints, poruthamMessage($vedhaPoints), $stars[$girlstarid], $stars[$boystarid]);
+
+/* 11. Nadi
+ * Aadi/Vata: 1,6,7,12,13,18,19,24,25
+ * Madhya/Pitta: 2,5,8,11,14,17,20,23,26
+ * Antya/Kapha: 3,4,9,10,15,16,21,22,27
+ */
+$nadiGroups = [
+    1=>'Aadi Nadi (Vata)', 2=>'Madhya Nadi (Pitta)', 3=>'Antya Nadi (Kapha)',
+    4=>'Antya Nadi (Kapha)', 5=>'Madhya Nadi (Pitta)', 6=>'Aadi Nadi (Vata)',
+    7=>'Aadi Nadi (Vata)', 8=>'Madhya Nadi (Pitta)', 9=>'Antya Nadi (Kapha)',
+    10=>'Antya Nadi (Kapha)', 11=>'Madhya Nadi (Pitta)', 12=>'Aadi Nadi (Vata)',
+    13=>'Aadi Nadi (Vata)', 14=>'Madhya Nadi (Pitta)', 15=>'Antya Nadi (Kapha)',
+    16=>'Antya Nadi (Kapha)', 17=>'Madhya Nadi (Pitta)', 18=>'Aadi Nadi (Vata)',
+    19=>'Aadi Nadi (Vata)', 20=>'Madhya Nadi (Pitta)', 21=>'Antya Nadi (Kapha)',
+    22=>'Antya Nadi (Kapha)', 23=>'Madhya Nadi (Pitta)', 24=>'Aadi Nadi (Vata)',
+    25=>'Aadi Nadi (Vata)', 26=>'Madhya Nadi (Pitta)', 27=>'Antya Nadi (Kapha)'
+];
+$nadiPoints = ($nadiGroups[$girlstarid] === $nadiGroups[$boystarid]) ? 0.0 : 1.0;
+$details[] = result('Nadi Porutham', $nadiPoints, poruthamMessage($nadiPoints), $nadiGroups[$girlstarid], $nadiGroups[$boystarid]);
+
+/* 12. Virutcham / Mara Porutham
+ * The source example: Mrigashira (Karungali/Cutch, milk-bearing) +
+ * Uttara Ashadha (Jackfruit, non-milk-bearing) => match.
+ * The published Tamil rule used by this implementation is: if at least one
+ * of the two associated trees is a milk-bearing tree, the porutham matches.
+ */
+$trees = [
+    1=>'Etti / Poison Nut', 2=>'Nelli / Amla', 3=>'Athi / Cluster Fig',
+    4=>'Naval / Jamun', 5=>'Karungali / Cutch', 6=>'Sengkarungali / Agarwood',
+    7=>'Moongil / Bamboo', 8=>'Arasu / Peepal', 9=>'Punnai / Alexandrian Laurel',
+    10=>'Aal / Banyan', 11=>'Palaa / Palash', 12=>'Alari / Rose Laurel',
+    13=>'Velam / Hog Plum', 14=>'Vilvam / Bilva', 15=>'Marudham / Arjun',
+    16=>'Vila / Wood Apple', 17=>'Magizham / Bakula', 18=>'Pirai / Red Silk Cotton',
+    19=>'Maa / Mango', 20=>'Vanchi / Sita Ashoka', 21=>'Palaa / Jackfruit',
+    22=>'Erukku / Milkweed', 23=>'Vanni / Shami', 24=>'Kadamba',
+    25=>'Themaa / Mango', 26=>'Vembu / Neem', 27=>'Iluppai / Mahua'
+];
+$milkTrees = [1,2,5,6,7,14,15,16,17,23,24,26];
+$girlMilk = in_array($girlstarid, $milkTrees, true);
+$boyMilk = in_array($boystarid, $milkTrees, true);
+$vrikshaPoints = ($girlMilk || $boyMilk) ? 1.0 : 0.0;
+$details[] = result('Virutcham Porutham', $vrikshaPoints, poruthamMessage($vrikshaPoints), $trees[$girlstarid], $trees[$boystarid]);
+
+$totalPoints = 0.0;
+$fullMatches = 0;
+$partialMatches = 0;
+foreach ($details as $item) {
+    $totalPoints += (float) $item['points'];
+    if ((float) $item['points'] >= 1.0) $fullMatches++;
+    elseif ((float) $item['points'] > 0.0) $partialMatches++;
+}
+
+// Return integers as integers and preserve 0.5 only where the calculation
+// intentionally uses a medium state.
+if (abs($totalPoints - round($totalPoints)) < 0.000001) {
+    $totalPoints = (int) round($totalPoints);
+}
+
+$response = [
+    'status' => 'success',
+    'total_points' => $totalPoints,
+    'max_points' => 12,
+    'full_matches' => $fullMatches,
+    'partial_matches' => $partialMatches,
+    'details' => $details,
+    'meta' => [
+        'bride_star_id' => $girlstarid,
+        'bride_pada' => $girlpadaid,
+        'bride_star' => $stars[$girlstarid],
+        'bride_rasi_id' => $girlRasi,
+        'bride_rasi' => $rasis[$girlRasi],
+        'groom_star_id' => $boystarid,
+        'groom_pada' => $boypadaid,
+        'groom_star' => $stars[$boystarid],
+        'groom_rasi_id' => $boyRasi,
+        'groom_rasi' => $rasis[$boyRasi],
+        'star_distance_girl_to_boy' => $starPos,
+        'rasi_distance_girl_to_boy' => $rasiPos,
+        'engine' => 'nakshamilan-12-porutham-v1'
+    ]
+];
+
+echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
