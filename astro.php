@@ -171,8 +171,21 @@ $mahendraPoints = in_array($starPos, [4,7,10,13,16,19,22,25], true) ? 1.0 : 0.0;
 $details[] = result('Mahendra Porutham', $mahendraPoints, poruthamMessage($mahendraPoints), $stars[$girlstarid], $stars[$boystarid]);
 
 /* 4. Sthree Deergha */
-$streePoints = $starPos > 13 ? 1.0 : 0.0;
-$details[] = result('Stree Porutham', $streePoints, poruthamMessage($streePoints), $stars[$girlstarid], $stars[$boystarid]);
+if ($starPos > 13) {
+    $streePoints = 1.0;
+} elseif ($starPos > 7) {
+    $streePoints = 0.5;
+} else {
+    $streePoints = 0.0;
+}
+
+$details[] = result(
+    'Stree Porutham',
+    $streePoints,
+    poruthamMessage($streePoints),
+    $stars[$girlstarid],
+    $stars[$boystarid]
+);
 
 /* 5. Yoni */
 $yoni = [
