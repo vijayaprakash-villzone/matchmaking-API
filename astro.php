@@ -120,7 +120,7 @@ $rasiPos = rasiDistance($girlRasi, $boyRasi);
 
 $details = [];
 
-// /* 1. Dina Porutham
+/* 1. Dina Porutham
  *
  * Match distances observed from porutham.co.in:
  * 2,4,6,8,9,11,13,15,17,18,20,22,24,26,27
