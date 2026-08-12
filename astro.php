@@ -120,32 +120,28 @@ $rasiPos = rasiDistance($girlRasi, $boyRasi);
 
 $details = [];
 
-/* 1. Dina Porutham
- * Existing source behavior: 2,4,6,8,9,11,13,15,17,18,20,22,24,26,27 are
- * full matches. Same-star special cases are retained because the observed
- * porutham.co.in Ashwini/Ashwini response returns Medium Match.
+// /* 1. Dina Porutham
+ *
+ * Match distances observed from porutham.co.in:
+ * 2,4,6,8,9,11,13,15,17,18,20,22,24,26,27
+ *
+ * Same-star distance = 1 is NOT a Dina match.
  */
-$dinaFull = [2,4,6,8,9,11,13,15,17,18,20,22,24,26,27];
-$dinaSameMedium = [11,12,14,7,8,1,3,20,21,5,17];
+$dinaFull = [2, 4, 6, 8, 9, 11, 13, 15, 17, 18, 20, 22, 24, 26, 27];
+
 $dinaPoints = 0.0;
-if ($girlstarid === $boystarid) {
-    if (in_array($girlstarid, [4,6,10,16,22,13,26,27], true)) {
-        $dinaPoints = 1.0;
-    } elseif (in_array($girlstarid, $dinaSameMedium, true)) {
-        $dinaPoints = 0.5;
-    } else {
-        $dinaPoints = 1.0;
-    }
-} elseif (
-    ($starPos === 12 && in_array($girlpadaid, [2,3,4], true)) ||
-    ($starPos === 14 && in_array($girlpadaid, [1,2,3], true)) ||
-    ($starPos === 16 && in_array($girlpadaid, [1,2,4], true))
-) {
-    $dinaPoints = 0.5;
-} elseif (in_array($starPos, $dinaFull, true)) {
+
+if (in_array($starPos, $dinaFull, true)) {
     $dinaPoints = 1.0;
 }
-$details[] = result('Dina Porutham', $dinaPoints, poruthamMessage($dinaPoints), $stars[$girlstarid], $stars[$boystarid]);
+
+$details[] = result(
+    'Dina Porutham',
+    $dinaPoints,
+    poruthamMessage($dinaPoints),
+    $stars[$girlstarid],
+    $stars[$boystarid]
+);
 
 /* 2. Gana Porutham
  * Observed source example: Deva girl + Manushya boy is presented as a match.
