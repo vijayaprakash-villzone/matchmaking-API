@@ -265,6 +265,7 @@ if (in_array([$girlRasi,$boyRasi], $extraRasiBad, true)) {
 $details[] = result('Rasi Porutham', $rasiPoints, poruthamMessage($rasiPoints), $rasis[$girlRasi], $rasis[$boyRasi]);
 
 /* 7. Rasi Athipathi */
+
 $planetNames = [
     1 => 'Sun',
     2 => 'Moon',
@@ -275,78 +276,167 @@ $planetNames = [
     7 => 'Saturn'
 ];
 
+
+/*
+ * Rasi Lords
+ *
+ * 1  Aries       -> Mars
+ * 2  Taurus      -> Venus
+ * 3  Gemini      -> Mercury
+ * 4  Cancer      -> Moon
+ * 5  Leo         -> Sun
+ * 6  Virgo       -> Mercury
+ * 7  Libra       -> Venus
+ * 8  Scorpio     -> Mars
+ * 9  Sagittarius -> Jupiter
+ * 10 Capricorn   -> Saturn
+ * 11 Aquarius    -> Saturn
+ * 12 Pisces      -> Jupiter
+ */
 $rasiLord = [
-    1 => 3,
-    2 => 6,
-    3 => 4,
-    4 => 2,
-    5 => 1,
-    6 => 4,   // Virgo -> Mercury
-    7 => 6,   // Libra -> Venus
-    8 => 3,
-    9 => 5,
-    10 => 7,
-    11 => 7,
-    12 => 5
+    1  => 3, // Aries -> Mars
+    2  => 6, // Taurus -> Venus
+    3  => 4, // Gemini -> Mercury
+    4  => 2, // Cancer -> Moon
+    5  => 1, // Leo -> Sun
+    6  => 4, // Virgo -> Mercury
+    7  => 6, // Libra -> Venus
+    8  => 3, // Scorpio -> Mars
+    9  => 5, // Sagittarius -> Jupiter
+    10 => 7, // Capricorn -> Saturn
+    11 => 7, // Aquarius -> Saturn
+    12 => 5  // Pisces -> Jupiter
 ];
+
+
+/*
+ * Planet relationship tables
+ *
+ * 1 = Sun
+ * 2 = Moon
+ * 3 = Mars
+ * 4 = Mercury
+ * 5 = Jupiter
+ * 6 = Venus
+ * 7 = Saturn
+ */
 
 $friends = [
-    1 => [2,3,5],
-    2 => [1,4],
-    3 => [1,2,5],
+    1 => [2, 3, 5], // Sun
+    2 => [1, 4],    // Moon
+    3 => [1, 2, 5], // Mars
     4 => [1],       // Mercury
-    5 => [1,2,3],
-    6 => [4,7],
-    7 => [4,6]
+    5 => [1, 2, 3], // Jupiter
+    6 => [4, 7],    // Venus
+    7 => [4, 6]     // Saturn
 ];
 
+
+/*
+ * Equal / Neutral relationships
+ */
 $equals = [
-    1 => [4],
-    2 => [3,5,6,7],
-    3 => [6,7],
-    4 => [3,5,7],
-    5 => [7],
-    6 => [3,5],
-    7 => [5]
+    1 => [4],          // Sun -> Mercury
+    2 => [3, 5, 6, 7], // Moon -> Mars, Jupiter, Venus, Saturn
+    3 => [6, 7],       // Mars -> Venus, Saturn
+    4 => [3, 5, 7],    // Mercury -> Mars, Jupiter, Saturn
+    5 => [7],          // Jupiter -> Saturn
+    6 => [3, 5],       // Venus -> Mars, Jupiter
+    7 => [5]           // Saturn -> Jupiter
 ];
 
+
+/*
+ * Enemy relationships
+ */
 $enemies = [
-    1 => [6,7],
-    2 => [],
-    3 => [4],
-    4 => [2,6],     // Mercury -> Moon, Venus
-    5 => [4,6],
-    6 => [1,2],
-    7 => [1,2,3]
+    1 => [6, 7],    // Sun -> Venus, Saturn
+    2 => [],        // Moon -> none
+    3 => [4],       // Mars -> Mercury
+    4 => [2, 6],    // Mercury -> Moon, Venus
+    5 => [4, 6],    // Jupiter -> Mercury, Venus
+    6 => [1, 2],    // Venus -> Sun, Moon
+    7 => [1, 2, 3]  // Saturn -> Sun, Moon, Mars
 ];
 
+
+/*
+ * Get planetary lords
+ */
 $gl = $rasiLord[$girlRasi];
 $bl = $rasiLord[$boyRasi];
 
 $athiPoints = 0.0;
 
+
+/*
+ * Rasi Athipathi scoring
+ *
+ * Same planet       -> 1.0
+ * Friend            -> 1.0
+ * Equal / Neutral   -> 0.5
+ * Enemy             -> 0.0
+ */
 if ($gl === $bl) {
+
     $athiPoints = 1.0;
+
 } elseif (in_array($bl, $friends[$gl], true)) {
+
     $athiPoints = 1.0;
+
 } elseif (in_array($bl, $equals[$gl], true)) {
+
     $athiPoints = 0.5;
+
 } elseif (in_array($bl, $enemies[$gl], true)) {
+
+    $athiPoints = 0.0;
+
+} else {
+
+    // Unknown relationship — keep safe default
     $athiPoints = 0.0;
 }
-// Preserve the source's special 7th-rasi handling.
+
+
+/*
+ * Special 7th-rasi handling from the reference website.
+ *
+ * These combinations remain 0.
+ * All other 7th-rasi combinations receive 0.5.
+ */
 if ($girlRasi !== $boyRasi && $rasiPos === 7) {
+
     $bad7Lord = [
-        [4,10], [10,4], [10,5], [5,11], [11,5]
+        [4, 10],
+        [10, 4],
+        [10, 5],
+        [5, 11],
+        [11, 5]
     ];
-    if (in_array([$girlRasi,$boyRasi], $bad7Lord, true)) {
+
+    if (in_array([$girlRasi, $boyRasi], $bad7Lord, true)) {
+
         $athiPoints = 0.0;
+
     } else {
+
         $athiPoints = 0.5;
     }
 }
-$details[] = result('Rasi Athipathi Porutham', $athiPoints, poruthamMessage($athiPoints), $planetNames[$gl], $planetNames[$bl]);
 
+
+/*
+ * Result
+ */
+$details[] = result(
+    'Rasi Athipathi Porutham',
+    $athiPoints,
+    poruthamMessage($athiPoints),
+    $planetNames[$gl],
+    $planetNames[$bl]
+);
 /* 8. Vasya */
 $vasya = [
     1=>[5,8], 2=>[4,7], 3=>[6], 4=>[8,9], 5=>[10], 6=>[2,12],
