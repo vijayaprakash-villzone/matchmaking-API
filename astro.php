@@ -144,19 +144,24 @@ $details[] = result(
 );
 
 /* 2. Gana Porutham
- * Observed source example: Deva girl + Manushya boy is presented as a match.
- * Same-gana is full. Rakshasa as bride against a non-Rakshasa groom is fail;
- * non-Rakshasa bride with Rakshasa groom is medium.
+ * Website-reference behavior:
+ * Same-gana = full match.
+ * Deva girl + Manushya boy = full match.
+ * Manushya girl + Deva boy = full match.
+ * Deva/Manushya bride against Rakshasa groom = fail/medium
+ * according to the observed reference cases.
  */
 $gg = $gana[$girlstarid];
 $bg = $gana[$boystarid];
+
 $ganaPoints = 0.0;
+
 if ($gg === $bg) {
     $ganaPoints = 1.0;
 } elseif ($gg === 1 && $bg === 2) {
     $ganaPoints = 1.0;
 } elseif ($gg === 2 && $bg === 1) {
-    $ganaPoints = 0.5;
+    $ganaPoints = 1.0;   // FIX: Case 6
 } elseif ($gg === 1 && $bg === 3) {
     $ganaPoints = 0.0;
 } elseif ($gg === 2 && $bg === 3) {
@@ -164,7 +169,14 @@ if ($gg === $bg) {
 } elseif ($gg === 3 && $bg !== 3) {
     $ganaPoints = 0.0;
 }
-$details[] = result('Gana Porutham', $ganaPoints, poruthamMessage($ganaPoints), $ganaNames[$gg], $ganaNames[$bg]);
+
+$details[] = result(
+    'Gana Porutham',
+    $ganaPoints,
+    poruthamMessage($ganaPoints),
+    $ganaNames[$gg],
+    $ganaNames[$bg]
+);
 
 /* 3. Mahendra */
 $mahendraPoints = in_array($starPos, [4,7,10,13,16,19,22,25], true) ? 1.0 : 0.0;
