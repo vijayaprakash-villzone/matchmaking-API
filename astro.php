@@ -143,14 +143,6 @@ $details[] = result(
     $stars[$boystarid]
 );
 
-/* 2. Gana Porutham
- * Website-reference behavior:
- * Same-gana = full match.
- * Deva girl + Manushya boy = full match.
- * Manushya girl + Deva boy = full match.
- * Deva/Manushya bride against Rakshasa groom = fail/medium
- * according to the observed reference cases.
- */
 $gg = $gana[$girlstarid];
 $bg = $gana[$boystarid];
 
@@ -161,9 +153,9 @@ if ($gg === $bg) {
 } elseif ($gg === 1 && $bg === 2) {
     $ganaPoints = 1.0;
 } elseif ($gg === 2 && $bg === 1) {
-    $ganaPoints = 1.0;   // FIX: Case 6
+    $ganaPoints = 1.0;
 } elseif ($gg === 1 && $bg === 3) {
-    $ganaPoints = 0.0;
+    $ganaPoints = 0.5;   // Case 8 fix
 } elseif ($gg === 2 && $bg === 3) {
     $ganaPoints = 0.5;
 } elseif ($gg === 3 && $bg !== 3) {
