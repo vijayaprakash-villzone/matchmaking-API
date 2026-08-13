@@ -143,22 +143,39 @@ $details[] = result(
     $stars[$boystarid]
 );
 
-$gg = $gana[$girlstarid];
-$bg = $gana[$boystarid];
+/* 2. Gana Porutham */
+
+$gg = (int)$gana[$girlstarid];
+$bg = (int)$gana[$boystarid];
 
 $ganaPoints = 0.0;
 
 if ($gg === $bg) {
+    // Same Gana
     $ganaPoints = 1.0;
+
 } elseif ($gg === 1 && $bg === 2) {
+    // Deva girl + Manushya boy
     $ganaPoints = 1.0;
+
 } elseif ($gg === 2 && $bg === 1) {
+    // Manushya girl + Deva boy
     $ganaPoints = 1.0;
+
 } elseif ($gg === 1 && $bg === 3) {
-    $ganaPoints = 0.5;   // Case 8 fix
+    // Deva girl + Rakshasa boy
+    $ganaPoints = 0.0;
+
 } elseif ($gg === 2 && $bg === 3) {
+    // Manushya girl + Rakshasa boy
     $ganaPoints = 0.5;
-} elseif ($gg === 3 && $bg !== 3) {
+
+} elseif ($gg === 3 && $bg === 1) {
+    // Rakshasa girl + Deva boy
+    $ganaPoints = 0.5;
+
+} elseif ($gg === 3 && $bg === 2) {
+    // Rakshasa girl + Manushya boy
     $ganaPoints = 0.0;
 }
 
